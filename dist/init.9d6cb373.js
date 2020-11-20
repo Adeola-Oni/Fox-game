@@ -123,7 +123,7 @@ parcelRequire = (function (modules, cache, entry, globalName) {
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.togglePoopBag = exports.modScene = exports.modFox = void 0;
+exports.writeModal = exports.togglePoopBag = exports.modScene = exports.modFox = void 0;
 
 const modFox = function modFox(state) {
   document.querySelector(".fox").className = `fox fox-${state}`;
@@ -142,14 +142,20 @@ const togglePoopBag = function togglePoopBag(show) {
 };
 
 exports.togglePoopBag = togglePoopBag;
+
+const writeModal = function writeModal(text = "") {
+  document.querySelector(".modal").innerHTML = `<div class="modal-inner">${text}</div>`;
+};
+
+exports.writeModal = writeModal;
 },{}],"constants.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.NIGHT_LENGTH = exports.DAY_LENGTH = exports.SCENES = exports.RAIN_CHANCE = exports.ICONS = exports.TICK_RATE = void 0;
-const TICK_RATE = 3000;
+exports.getNextPoopTime = exports.getNextDieTime = exports.getNextHungerTime = exports.NIGHT_LENGTH = exports.DAY_LENGTH = exports.SCENES = exports.RAIN_CHANCE = exports.ICONS = exports.TICK_RATE = void 0;
+const TICK_RATE = 1000;
 exports.TICK_RATE = TICK_RATE;
 const ICONS = ["fish", "poop", "weather"];
 exports.ICONS = ICONS;
@@ -157,10 +163,22 @@ const RAIN_CHANCE = 0.2;
 exports.RAIN_CHANCE = RAIN_CHANCE;
 const SCENES = ["day", "rain"];
 exports.SCENES = SCENES;
-const DAY_LENGTH = 3;
+const DAY_LENGTH = 60;
 exports.DAY_LENGTH = DAY_LENGTH;
-const NIGHT_LENGTH = 3;
+const NIGHT_LENGTH = 4;
 exports.NIGHT_LENGTH = NIGHT_LENGTH;
+
+const getNextHungerTime = clock => Math.floor(Math.random() * 3) + 5 + clock;
+
+exports.getNextHungerTime = getNextHungerTime;
+
+const getNextDieTime = clock => Math.floor(Math.random() * 2) + 3 + clock;
+
+exports.getNextDieTime = getNextDieTime;
+
+const getNextPoopTime = clock => Math.floor(Math.random() * 3) + 4 + clock;
+
+exports.getNextPoopTime = getNextPoopTime;
 },{}],"gamestate.js":[function(require,module,exports) {
 "use strict";
 
@@ -178,6 +196,11 @@ const gameState = {
   clock: 1,
   wakeTime: -1,
   sleepTime: -1,
+  hungryTime: -1,
+  dieTime: -1,
+  poopTime: -1,
+  timeToStartCelebrating: -1,
+  timeToEndCelebrating: -1,
 
   tick() {
     this.clock++;
@@ -187,6 +210,16 @@ const gameState = {
       this.wake();
     } else if (this.clock === this.sleepTime) {
       this.sleep();
+    } else if (this.clock === this.hungryTime) {
+      this.getHungry();
+    } else if (this.clock === this.dieTime) {
+      this.die();
+    } else if (this.clock === this.timeToStartCelebrating) {
+      this.startCelebrating();
+    } else if (this.clock === this.timeToEndCelebrating) {
+      this.endCelebrating();
+    } else if (this.clock === this.poopTime) {
+      this.poop();
     }
 
     return this.clock;
@@ -198,22 +231,81 @@ const gameState = {
     this.wakeTime = this.clock + 3;
     (0, _ui.modFox)("egg");
     (0, _ui.modScene)("day");
+    (0, _ui.writeModal)("");
   },
 
   wake() {
     this.current = "IDLING";
     this.wakeTime = -1;
-    (0, _ui.modFox)("idling");
-    this.scene = Math.random > _constants.RAIN_CHANCE ? 0 : 1;
+    this.scene = Math.random() > _constants.RAIN_CHANCE ? 0 : 1;
     (0, _ui.modScene)(_constants.SCENES[this.scene]);
     this.sleepTime = this.clock + _constants.DAY_LENGTH;
+    this.hungryTime = (0, _constants.getNextHungerTime)(this.clock);
+    this.determineFoxState();
   },
 
   sleep() {
     this.state = "SLEEP";
     (0, _ui.modFox)("sleep");
     (0, _ui.modScene)("night");
+    this.clearTimes();
     this.wakeTime = this.clock + _constants.NIGHT_LENGTH;
+  },
+
+  getHungry() {
+    this.current = "HUNGRY";
+    this.dieTime = (0, _constants.getNextDieTime)(this.clock);
+    this.hungryTime = -1;
+    (0, _ui.modFox)("hungry");
+  },
+
+  die() {
+    this.current = "DEAD";
+    (0, _ui.modScene)("dead");
+    (0, _ui.modFox)("dead");
+    this.clearTimes();
+    (0, _ui.writeModal)("Fox is dead. Press the button to start over again");
+  },
+
+  startCelebrating() {
+    this.current = "CELBRATING";
+    (0, _ui.modFox)("celebrate");
+    this.timeToStartCelebrating = -1;
+    this.timeToEndCelebrating = this.clock + 2;
+  },
+
+  endCelebrating() {
+    this.timeToEndCelebrating = -1;
+    this.current = "IDLING";
+    this.determineFoxState();
+    (0, _ui.togglePoopBag)(false);
+  },
+
+  poop() {
+    this.current = "POOPING";
+    this.poopTime = -1;
+    this.dieTime = (0, _constants.getNextDieTime)(this.clock);
+    (0, _ui.modFox)("pooping");
+  },
+
+  determineFoxState() {
+    if (this.current === "IDLING") {
+      if (_constants.SCENES[this.scene] === "rain") {
+        (0, _ui.modFox)("rain");
+      } else {
+        (0, _ui.modFox)("idling");
+      }
+    }
+  },
+
+  clearTimes() {
+    this.wakeTime = -1;
+    this.sleepTime = -1;
+    this.hungryTime = -1;
+    this.dieTime = -1;
+    this.poopTime = -1;
+    this.timeToStartCelebrating = -1;
+    this.timeToEndCelebrating = -1;
   },
 
   handleUserAction(icon) {
@@ -242,15 +334,31 @@ const gameState = {
   },
 
   changeWeather() {
-    console.log("change weather");
+    this.scene = (this.scene + 1) % _constants.SCENES.length;
+    (0, _ui.modScene)(_constants.SCENES[this.scene]);
   },
 
   cleanUpPoop() {
-    console.log("clean up poop");
+    if (!this.current === "POOPING") {
+      return;
+    }
+
+    this.dieTime = -1;
+    (0, _ui.togglePoopBag)(true);
+    this.startCelebrating();
+    this.hungryTime = (0, _constants.getNextHungerTime)(this.clock);
   },
 
   feed() {
-    console.log("feed the fox");
+    if (this.current !== "HUNGRY") {
+      return;
+    }
+
+    this.current = "FEEDING";
+    this.dieTime = -1;
+    this.poopTime = (0, _constants.getNextPoopTime)(this.clock);
+    (0, _ui.modFox)("eating");
+    this.timeToStartCelebrating = this.clock + 2;
   }
 
 };
@@ -356,7 +464,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "55762" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "50303" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};
